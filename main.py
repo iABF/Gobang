@@ -12,6 +12,16 @@ class ChessBoard:
     def __init__(self, size):
         self.size = size
         self.board = [[0 for x in range(size)] for y in range(size)]
+        self.chessList = [(3, 3), (3, 11), (7, 7), (11, 3), (11, 11)]
+        self.blackFirst = 1
+
+    def draw_chess(self, screen, x, y, index):
+        center = (int(x * BOX_SIZE + BOARD_MARGIN), int(y * BOX_SIZE + BOARD_MARGIN))
+        if (self.blackFirst + index) % 2 == 1:
+            color = (18, 23, 27)
+        else:
+            color = (245, 249, 250)
+        pygame.draw.circle(screen, color, center, int(BOX_SIZE * 0.4))
 
     def initialize(self, screen):
         for x in range(self.size):
@@ -25,6 +35,8 @@ class ChessBoard:
         for (x, y) in pos:
             rect = (x * BOX_SIZE + BOARD_MARGIN - 2, y * BOX_SIZE + BOARD_MARGIN - 2, 6, 6)
             pygame.draw.rect(screen, (0, 0, 0), rect)
+        for index, (x, y) in enumerate(self.chessList):
+            self.draw_chess(screen, x, y, index)
 
 
 class Button:
