@@ -61,7 +61,7 @@ class ChessBoard:
                     return x, y
         return -1, -1
 
-    def put_chess(self, x, y):
+    def put_chess(self, x, y):  # Just put chess on chessboard
         if len(self.chessList) > 0:
             u, v = self.chessList[len(self.chessList) - 1]
             self.board[x][y] = 3 - self.board[u][v]  # Black: 1; White: 2; Empty: 0
@@ -77,19 +77,43 @@ class Gobang:
         pygame.display.set_caption(caption)
         self.chessBoard = ChessBoard(MP_SIZE)
         self.turn = True  # default: Player first
+        self.AI = GobangAI(self.chessBoard)
 
     def refresh(self):
         pygame.draw.rect(self.screen, (202, 152, 99), pygame.Rect(0, 0, SCREEN_HEIGHT, SCREEN_HEIGHT))
         pygame.draw.rect(self.screen, (255, 255, 255), pygame.Rect(SCREEN_HEIGHT, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
         self.chessBoard.initialize(self.screen)
 
-    def mouse_action(self, mse_x, mse_y):
+    def mouse_action(self, mse_x, mse_y):  # Mouse action IS player action, which has to boot GobangAI in the end
         if is_chessboard(mse_x, mse_y):
             if self.turn:
                 x, y = self.chessBoard.get_chess_pos(mse_x, mse_y)
                 if x >= 0 and self.chessBoard.board[x][y] == 0:
                     self.chessBoard.put_chess(x, y)
                     self.turn = False
+                    self.opponent_action()
+
+    def opponent_action(self):
+        if not self.turn:
+            u, v = self.chessBoard.chessList[len(self.chessBoard.chessList) - 1]
+            x, y = self.AI.decide(3 - self.chessBoard.board[u][v])
+            self.chessBoard.put_chess(x, y)
+            self.turn = True
+
+
+class GobangAI:
+    def __init__(self, chessBoard):
+        self.chessBoard = chessBoard
+
+    def decide(self, chessType):
+        x, y = self.think(chessType)
+        return x, y
+
+    def think(self, chessType):
+        for x in range(self.chessBoard.size):
+            for y in range(self.chessBoard.size):
+                if self.chessBoard.board[x][y] == 0:
+                    return x, y
 
 
 chessGame = Gobang("Gobang")
