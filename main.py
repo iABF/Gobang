@@ -9,6 +9,8 @@ BOX_SIZE = (SCREEN_HEIGHT - 2 * BOARD_MARGIN) / (MP_SIZE - 1)
 BUTTON_WIDTH = 40
 BUTTON_HEIGHT = 20
 
+assert (MP_SIZE % 2 == 1)
+
 
 def get_pos(x):
     return x * BOX_SIZE + BOARD_MARGIN
@@ -69,6 +71,12 @@ class ChessBoard:
             self.board[x][y] = self.blackFirst
         self.chessList.append((x, y))
 
+    def undo_chess(self):
+        if len(self.chessList) > 0:
+            u, v = self.chessList[len(self.chessList) - 1]
+            self.chessList.pop(len(self.chessList) - 1)
+            self.board[u][v] = 0
+
 
 class Gobang:
     def __init__(self, caption):
@@ -100,20 +108,38 @@ class Gobang:
             self.chessBoard.put_chess(x, y)
             self.turn = True
 
+    def regret(self):
+        if self.turn:
+            for i in range(2):
+                self.chessBoard.undo_chess()
+
 
 class GobangAI:
     def __init__(self, chessBoard):
         self.chessBoard = chessBoard
+        center = chessBoard.size // 2
+        self.boxValue = [[(center - max(abs(x - center), abs(y - center)))
+                          for x in range(chessBoard.size)]
+                         for y in range(chessBoard.size)]  # initial weight, make sure AI searches from center
+
+    def get_search_order(self):  # search from center
+        orders = []
+        for x in range(self.chessBoard.size):
+            for y in range(self.chessBoard.size):
+                if self.chessBoard.board[x][y] == 0:
+                    orders.append((self.boxValue[x][y], x, y))
+        orders.sort(reverse=True)
+        return orders
 
     def decide(self, chessType):
         x, y = self.think(chessType)
         return x, y
 
     def think(self, chessType):
-        for x in range(self.chessBoard.size):
-            for y in range(self.chessBoard.size):
-                if self.chessBoard.board[x][y] == 0:
-                    return x, y
+        chessAI = chessType
+        chessPlayer = 3 - chessType
+        orders = self.get_search_order()
+        return orders[0][1], orders[0][2]
 
 
 chessGame = Gobang("Gobang")
@@ -128,6 +154,6 @@ while True:
             chessGame.mouse_action(mouse_x, mouse_y)
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_z and pygame.key.get_mods() & pygame.KMOD_CTRL:
-                print("Regret!!!")
+                chessGame.regret()
             elif event.key == pygame.K_ESCAPE:
                 sys.exit()
