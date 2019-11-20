@@ -2,14 +2,24 @@ import pygame
 import sys
 
 MP_SIZE = 15
-SCREEN_WIDTH = 800
+SCREEN_WIDTH = 600
 SCREEN_HEIGHT = 600
 BOARD_MARGIN = 30
 BOX_SIZE = (SCREEN_HEIGHT - 2 * BOARD_MARGIN) / (MP_SIZE - 1)
+BUTTON_WIDTH = 40
+BUTTON_HEIGHT = 20
 
 
 def get_pos(x):
     return x * BOX_SIZE + BOARD_MARGIN
+
+
+def is_chessboard(mse_x, mse_y):
+    if BOARD_MARGIN - BOX_SIZE * 0.4 <= mse_x <= SCREEN_HEIGHT - BOARD_MARGIN + BOX_SIZE * 0.4 and \
+            BOARD_MARGIN - BOX_SIZE * 0.4 <= mse_y <= SCREEN_HEIGHT - BOARD_MARGIN + BOX_SIZE * 0.4:
+        return True
+    else:
+        return False
 
 
 class ChessBoard:
@@ -54,23 +64,10 @@ class ChessBoard:
     def put_chess(self, x, y):
         if len(self.chessList) > 0:
             u, v = self.chessList[len(self.chessList) - 1]
-            self.board[x][y] = 1 - self.board[u][v]
+            self.board[x][y] = 3 - self.board[u][v]  # Black: 1; White: 2; Empty: 0
         else:
             self.board[x][y] = self.blackFirst
         self.chessList.append((x, y))
-
-
-class Button:
-    def __init__(self, screen, x, y, text):
-        self.screen = screen
-
-
-def is_chessboard(mse_x, mse_y):
-    if BOARD_MARGIN - BOX_SIZE * 0.4 <= mse_x <= SCREEN_HEIGHT - BOARD_MARGIN + BOX_SIZE * 0.4 and \
-            BOARD_MARGIN - BOX_SIZE * 0.4 <= mse_y <= SCREEN_HEIGHT - BOARD_MARGIN + BOX_SIZE * 0.4:
-        return True
-    else:
-        return False
 
 
 class Gobang:
@@ -90,8 +87,9 @@ class Gobang:
         if is_chessboard(mse_x, mse_y):
             if self.turn:
                 x, y = self.chessBoard.get_chess_pos(mse_x, mse_y)
-                if x >= 0:
+                if x >= 0 and self.chessBoard.board[x][y] == 0:
                     self.chessBoard.put_chess(x, y)
+                    self.turn = False
 
 
 chessGame = Gobang("Gobang")
@@ -104,3 +102,8 @@ while True:
         elif event.type == pygame.MOUSEBUTTONDOWN:
             mouse_x, mouse_y = pygame.mouse.get_pos()
             chessGame.mouse_action(mouse_x, mouse_y)
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_z and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                print("Regret!!!")
+            elif event.key == pygame.K_ESCAPE:
+                sys.exit()
