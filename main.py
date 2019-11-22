@@ -96,6 +96,7 @@ class Gobang:
         pygame.draw.rect(self.screen, (202, 152, 99), pygame.Rect(0, 0, SCREEN_HEIGHT, SCREEN_HEIGHT))
         pygame.draw.rect(self.screen, (255, 255, 255), pygame.Rect(SCREEN_HEIGHT, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
         self.chessBoard.initialize(self.screen)
+        pygame.display.update()
 
     def mouse_action(self, mse_x, mse_y):  # Mouse action IS player action, which has to boot GobangAI in the end
         if is_chessboard(mse_x, mse_y):
@@ -104,6 +105,12 @@ class Gobang:
                 if x >= 0 and self.chessBoard.board[x][y] == 0:
                     self.chessBoard.put_chess(x, y)
                     self.turn = False
+                    self.refresh()
+                    u, v = self.chessBoard.chessList[len(self.chessBoard.chessList) - 1]
+                    chessType = self.chessBoard.board[u][v]
+                    if self.AI.compute_chess_combination(chessType, 3 - chessType, True):
+                        print("You win.")
+                        exit(0)
                     self.opponent_action()
 
     def opponent_action(self):
@@ -111,6 +118,10 @@ class Gobang:
             u, v = self.chessBoard.chessList[len(self.chessBoard.chessList) - 1]
             x, y = self.AI.decide(3 - self.chessBoard.board[u][v])
             self.chessBoard.put_chess(x, y)
+            chessType = 3 - self.chessBoard.board[u][v]
+            if self.AI.compute_chess_combination(chessType, 3 - chessType, True):
+                print("Computer win.")
+                exit(0)
             self.turn = True
 
     def regret(self):
@@ -136,18 +147,6 @@ class GobangAI:
                               for direction in range(4)]
                              for x in range(chessBoard.size)]
                             for y in range(chessBoard.size)]
-        self.SCORE_FIVE = 100
-        self.SCORE_LIVE_FOUR = 90
-        self.SCORE_DOUBLE_DEATH_FOUR = 90
-        self.SCORE_DOUBLE_LIVE_THREE = 80
-        self.SCORE_DEATH_FOUR_LIVE_THREE = 90
-        self.SCORE_DEATH_THREE_LIVE_THREE = 70
-        self.SCORE_DEATH_FOUR = 60
-        self.SCORE_LIVE_THREE = 50
-        self.SCORE_DOUBLE_LIVE_TWO = 40
-        self.SCORE_DEATH_THREE = 30
-        self.SCORE_LIVE_TWO = 20
-        self.SCORE_DEATH_TWO = 10
         self.CHESS_FIVE = 1
         self.CHESS_LIVE_FOUR = 2
         self.CHESS_DEATH_FOUR = 3
@@ -167,18 +166,51 @@ class GobangAI:
         return orders
 
     def decide(self, chessType):
-        x, y = self.think(chessType)
+        score, x, y = self.think(chessType)
         return x, y
 
     def think(self, chessType):
         chessAI = chessType
         chessPlayer = 3 - chessType
         orders = self.get_search_order()
-        return orders[0][1], orders[0][2]
+        maxScore = -0x7fffffff
+        position = None
+        for value, x, y in orders:
+            self.chessBoard.board[x][y] = chessAI
+            chessCombination = self.compute_chess_combination(chessAI, chessPlayer)
+            self.chessBoard.board[x][y] = 0
+            ai_combination, player_combination = chessCombination[chessAI - 1], chessCombination[chessPlayer - 1]
+            ai_score, player_score = self.compute_score(ai_combination, player_combination)
+            score = ai_score - player_score
+            if score > maxScore:
+                maxScore = score
+                position = (score, x, y)
+        return position
 
-    def compute_chess_combination(self, chessAI, chessPlayer):
-        chessCombination = [0 for x in range(8)]
+    def compute_chess_combination(self, chessAI, chessPlayer, checkWin=False):
+        chessCombination = [[0 for x in range(8)] for y in range(2)]
+        for x in range(self.chessBoard.size):
+            for y in range(self.chessBoard.size):
+                for direction in range(4):
+                    self.vis[x][y][direction] = False
+        for x in range(self.chessBoard.size):
+            for y in range(self.chessBoard.size):
+                for direction in range(4):
+                    for chessType in range(4):
+                        self.isDoubleTwo[x][y][direction][chessType] = False
+        for x in range(self.chessBoard.size):
+            for y in range(self.chessBoard.size):
+                if self.chessBoard.board[x][y] == chessAI:
+                    self.compute_one_side_combination(chessAI, chessPlayer, chessCombination, x, y)
+                elif self.chessBoard.board[x][y] == chessPlayer:
+                    self.compute_one_side_combination(chessPlayer, chessAI, chessCombination, x, y)
 
+        if checkWin:
+            print(chessCombination)
+            return chessCombination[chessAI - 1][self.CHESS_FIVE] > 0
+        return chessCombination
+
+    def compute_one_side_combination(self, chessAI, chessPlayer, chessCombination, x, y):
         def inside_board(xx, yy):
             return 0 <= xx < self.chessBoard.size and 0 <= yy < self.chessBoard.size
 
@@ -192,403 +224,433 @@ class GobangAI:
             return self.chessBoard.board[xx][yy] == 0
 
         def add_live_four():
-            chessCombination[self.CHESS_LIVE_FOUR] += 1
+            chessCombination[chessAI - 1][self.CHESS_LIVE_FOUR] += 1
 
         def add_death_four():
-            chessCombination[self.CHESS_DEATH_FOUR] += 1
+            chessCombination[chessAI - 1][self.CHESS_DEATH_FOUR] += 1
 
         def add_live_three():
-            chessCombination[self.CHESS_LIVE_THREE] += 1
+            chessCombination[chessAI - 1][self.CHESS_LIVE_THREE] += 1
 
         def add_death_three():
-            chessCombination[self.CHESS_DEATH_THREE] += 1
+            chessCombination[chessAI - 1][self.CHESS_DEATH_THREE] += 1
 
         def add_live_two():
-            chessCombination[self.CHESS_LIVE_TWO] += 1
+            chessCombination[chessAI - 1][self.CHESS_LIVE_TWO] += 1
 
         def add_death_two():
-            chessCombination[self.CHESS_DEATH_TWO] += 1
+            chessCombination[chessAI - 1][self.CHESS_DEATH_TWO] += 1
 
         def add_five():
-            chessCombination[self.CHESS_FIVE] += 1
+            chessCombination[chessAI - 1][self.CHESS_FIVE] += 1
 
-        for x in range(self.chessBoard.size):
-            for y in range(self.chessBoard.size):
-                for direction in range(4):
-                    self.vis[x][y][direction] = False
-        for x in range(self.chessBoard.size):
-            for y in range(self.chessBoard.size):
-                for direction in range(4):
-                    for chessType in range(4):
-                        self.isDoubleTwo[x][y][direction][chessType] = False
-
-        for x in range(self.chessBoard.size):
-            for y in range(self.chessBoard.size):
-                if self.chessBoard.board[x][y] == 0:
-                    continue
-                for index, dir_x, dir_y in enumerate(self.dir):
-                    if self.vis[x][y][index]:
-                        continue
-                    self.vis[x][y][index] = True
-                    count, l_max, r_max, enemy = 1, 0, 0, 0
-                    l_death, r_death = False, False
-                    for i in range(4):
-                        next_x = x + dir_x * i
-                        next_y = y + dir_y * i
-                        if inside_board(next_x, next_y):
-                            if is_ai(next_x, next_y):
-                                count += 1
-                                l_max = i
-                                self.vis[next_x][next_y][index] = True
-                            else:
-                                if is_player(next_x, next_y):
-                                    enemy += 1
-                                    l_death = True
-                                break
-                        else:
+        for index, (dir_x, dir_y) in enumerate(self.dir):
+            if self.vis[x][y][index]:
+                continue
+            self.vis[x][y][index] = True
+            count, l_max, r_max, enemy = 1, 0, 0, 0
+            l_death, r_death = False, False
+            for i in range(1, 5):
+                next_x = x + dir_x * i
+                next_y = y + dir_y * i
+                if inside_board(next_x, next_y):
+                    if is_ai(next_x, next_y):
+                        count += 1
+                        l_max = i
+                        self.vis[next_x][next_y][index] = True
+                    else:
+                        if is_player(next_x, next_y):
                             enemy += 1
                             l_death = True
-                            break
-                    for i in range(4):
-                        next_x = x - dir_x * i
-                        next_y = y - dir_y * i
-                        if inside_board(next_x, next_y):
-                            if is_ai(next_x, next_y):
-                                count += 1
-                                r_max = i
-                                self.vis[next_x][next_y][index] = True
-                            else:
-                                if is_player(next_x, next_y):
-                                    enemy += 1
-                                    r_death = True
-                                break
-                        else:
+                        break
+                else:
+                    enemy += 1
+                    l_death = True
+                    break
+            for i in range(1, 5):
+                next_x = x - dir_x * i
+                next_y = y - dir_y * i
+                if inside_board(next_x, next_y):
+                    if is_ai(next_x, next_y):
+                        count += 1
+                        r_max = i
+                        self.vis[next_x][next_y][index] = True
+                    else:
+                        if is_player(next_x, next_y):
                             enemy += 1
                             r_death = True
-                            break
-                    if count >= 5:  # *****
-                        add_five()
-                    elif enemy == 2:  # Since then, only one or zero enemies left
-                        continue
-                    elif count == 4:
-                        if enemy == 0:  # -****-
-                            add_live_four()
-                        else:  # -****^
+                        break
+                else:
+                    enemy += 1
+                    r_death = True
+                    break
+            print(count, l_max, r_max)
+            if count >= 5:  # *****
+                add_five()
+            elif enemy == 2:  # Since then, only one or zero enemies left
+                continue
+            elif count == 4:
+                if enemy == 0:  # -****-
+                    add_live_four()
+                else:  # -****^
+                    add_death_four()
+            elif count == 3:
+                if enemy == 0:
+                    next_x = x + dir_x * (l_max + 2)
+                    next_y = y + dir_y * (l_max + 2)
+                    enemy_far = 0
+                    if inside_board(next_x, next_y):
+                        if is_ai(next_x, next_y):  # *-***-
                             add_death_four()
-                    elif count == 3:
-                        if enemy == 0:
-                            next_x = x + dir_x * (l_max + 2)
-                            next_y = y + dir_y * (l_max + 2)
-                            enemy_far = 0
-                            if inside_board(next_x, next_y):
-                                if is_ai(next_x, next_y):  # *-***-
-                                    add_death_four()
-                                elif is_player(next_x, next_y):  # ^-***-
-                                    enemy_far += 1
-                            else:  # ^-***-
-                                enemy_far += 1
-                            next_x = x - dir_x * (r_max + 2)
-                            next_y = y - dir_y * (r_max + 2)
-                            if inside_board(next_x, next_y):
-                                if is_ai(next_x, next_y):  # -***-*
-                                    add_death_four()
-                                elif is_player(next_x, next_y):  # -***-^
-                                    enemy_far += 1
-                            else:  # -***-^
-                                enemy_far += 1
-                            if enemy_far == 2:  # ^-***-^
+                        elif is_player(next_x, next_y):  # ^-***-
+                            enemy_far += 1
+                    else:  # ^-***-
+                        enemy_far += 1
+                    next_x = x - dir_x * (r_max + 2)
+                    next_y = y - dir_y * (r_max + 2)
+                    if inside_board(next_x, next_y):
+                        if is_ai(next_x, next_y):  # -***-*
+                            add_death_four()
+                        elif is_player(next_x, next_y):  # -***-^
+                            enemy_far += 1
+                    else:  # -***-^
+                        enemy_far += 1
+                    if enemy_far == 2:  # ^-***-^
+                        add_death_three()
+                    else:  # -***-
+                        add_live_three()
+                else:  # enemy is 1
+                    if l_death:  # ^***-
+                        next_x = x - dir_x * (r_max + 2)
+                        next_y = y - dir_y * (r_max + 2)
+                        if inside_board(next_x, next_y):
+                            if is_ai(next_x, next_y):  # ^***-*
+                                add_death_four()
+                            elif is_empty(next_x, next_y):  # ^***--
                                 add_death_three()
-                            else:  # -***-
-                                add_live_three()
-                        else:  # enemy is 1
-                            if l_death:  # ^***-
-                                next_x = x - dir_x * (r_max + 2)
-                                next_y = y - dir_y * (r_max + 2)
-                                if inside_board(next_x, next_y):
-                                    if is_ai(next_x, next_y):  # ^***-*
+                    elif r_death:  # -***^
+                        next_x = x + dir_x * (l_max + 2)
+                        next_y = y + dir_y * (l_max + 2)
+                        if inside_board(next_x, next_y):
+                            if is_ai(next_x, next_y):  # *-***^
+                                add_death_four()
+                            elif is_empty(next_x, next_y):  # --***^
+                                add_death_three()
+            elif count == 2:
+                if enemy == 0:  # -**-
+                    enemy_far = 0
+                    empty = 0
+                    next_x = x + dir_x * (l_max + 2)
+                    next_y = y + dir_y * (l_max + 2)
+                    if inside_board(next_x, next_y):
+                        if is_ai(next_x, next_y):  # ?*-**-
+                            next_xx = x + dir_x * (l_max + 3)
+                            next_yy = y + dir_y * (l_max + 3)
+                            if inside_board(next_xx, next_yy):
+                                if is_ai(next_xx, next_yy):  # **-**-
+                                    if not self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][0]:
                                         add_death_four()
-                                    elif is_empty(next_x, next_y):  # ^***--
-                                        add_death_three()
-                            elif r_death:  # -***^
-                                next_x = x + dir_x * (l_max + 2)
-                                next_y = y + dir_y * (l_max + 2)
-                                if inside_board(next_x, next_y):
-                                    if is_ai(next_x, next_y):  # *-***^
+                                        self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][0] = True
+                                elif is_player(next_xx, next_yy):  # ^*-**-
+                                    add_death_three()
+                                else:  # -*-**-
+                                    add_live_three()
+                            else:  # ^*-**-
+                                add_death_three()
+                        elif is_player(next_x, next_y):  # ^-**-
+                            enemy_far += 1
+                        else:  # ?--**-
+                            next_xx = x + dir_x * (l_max + 3)
+                            next_yy = y + dir_y * (l_max + 3)
+                            if inside_board(next_xx, next_yy):
+                                if is_ai(next_xx, next_yy):  # *--**-
+                                    add_death_three()
+                                else:
+                                    empty += 1
+                            else:
+                                empty += 1
+                    else:  # ^-**-
+                        enemy_far += 1
+                    next_x = x - dir_x * (r_max + 2)
+                    next_y = y - dir_y * (r_max + 2)
+                    if inside_board(next_x, next_y):
+                        if is_ai(next_x, next_y):  # -**-*?
+                            next_xx = x - dir_x * (r_max + 3)
+                            next_yy = y - dir_y * (r_max + 3)
+                            if inside_board(next_xx, next_yy):
+                                if is_ai(next_xx, next_yy):  # -**-**
+                                    if not self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][0]:
                                         add_death_four()
-                                    elif is_empty(next_x, next_y):  # --***^
-                                        add_death_three()
-                    elif count == 2:
-                        if enemy == 0:  # -**-
-                            enemy_far = 0
-                            empty = 0
-                            next_x = x + dir_x * (l_max + 2)
-                            next_y = y + dir_y * (l_max + 2)
-                            if inside_board(next_x, next_y):
-                                if is_ai(next_x, next_y):  # ?*-**-
-                                    next_xx = x + dir_x * (l_max + 3)
-                                    next_yy = y + dir_y * (l_max + 3)
-                                    if inside_board(next_xx, next_yy):
-                                        if is_ai(next_xx, next_yy):  # **-**-
-                                            if not self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][0]:
-                                                add_death_four()
-                                                self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][0] = True
-                                        elif is_player(next_xx, next_yy):  # ^*-**-
-                                            add_death_three()
-                                        else:  # -*-**-
-                                            add_live_three()
-                                    else:  # ^*-**-
-                                        add_death_three()
-                                elif is_player(next_x, next_y):  # ^-**-
-                                    enemy_far += 1
-                                else:  # ?--**-
-                                    next_xx = x + dir_x * (l_max + 3)
-                                    next_yy = y + dir_y * (l_max + 3)
-                                    if inside_board(next_xx, next_yy):
-                                        if is_ai(next_xx, next_yy):  # *--**-
-                                            add_death_three()
-                                        else:
-                                            empty += 1
-                                    else:
-                                        empty += 1
-                            else:  # ^-**-
-                                enemy_far += 1
-                            next_x = x - dir_x * (r_max + 2)
-                            next_y = y - dir_y * (r_max + 2)
-                            if inside_board(next_x, next_y):
-                                if is_ai(next_x, next_y):  # -**-*?
-                                    next_xx = x - dir_x * (r_max + 3)
-                                    next_yy = y - dir_y * (r_max + 3)
-                                    if inside_board(next_xx, next_yy):
-                                        if is_ai(next_xx, next_yy):  # -**-**
-                                            if not self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][0]:
-                                                add_death_four()
-                                                self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][0] = True
-                                        elif is_player(next_xx, next_yy):  # -**-*^
-                                            add_death_three()
-                                        else:  # -**-*-
-                                            add_live_three()
-                                    else:  # -**-*^
-                                        add_death_three()
-                                elif is_player(next_x, next_y):  # -**-^
-                                    enemy_far += 1
-                                else:  # -**--?
-                                    next_xx = x - dir_x * (r_max + 3)
-                                    next_yy = y - dir_y * (r_max + 3)
-                                    if inside_board(next_xx, next_yy):
-                                        if is_ai(next_xx, next_yy):  # -**--*
-                                            add_death_three()
-                                        else:
-                                            empty += 1
-                                    else:
-                                        empty += 1
-                            else:  # -**-^
-                                enemy_far += 1
-                            if enemy_far == 2:  # ^-**-^
-                                continue
-                            elif empty == 2:  # n--**--n
-                                add_live_two()
-                        else:
-                            if l_death:  # ^**-
-                                next_x = x - dir_x * (r_max + 2)
-                                next_y = y - dir_y * (r_max + 2)
-                                if inside_board(next_x, next_y):
-                                    if is_ai(next_x, next_y):  # ^**-*?
-                                        next_xx = x - dir_x * (r_max + 3)
-                                        next_yy = y - dir_y * (r_max + 3)
-                                        if inside_board(next_xx, next_yy):
-                                            if is_ai(next_xx, next_yy):  # ^**-**
-                                                if not self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][0]:
-                                                    add_death_four()
-                                                    self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][0] = True
-                                            elif is_player(next_xx, next_yy):  # ^**-*^
-                                                continue
-                                            else:  # ^**-*-
-                                                add_death_three()
-                                        else:  # ^**-*^
-                                            continue
-                                    elif is_player(next_x, next_y):  # ^**-^
-                                        continue
-                                    else:  # ^**--?
-                                        next_xx = x - dir_x * (r_max + 3)
-                                        next_yy = y - dir_y * (r_max + 3)
-                                        if inside_board(next_xx, next_yy):
-                                            if is_ai(next_xx, next_yy):  # ^**--*
-                                                add_death_three()
-                                            elif is_player(next_xx, next_yy):  # ^**--^
-                                                continue
-                                            else:  # ^**---
-                                                add_death_two()
-                                        else:  # ^**--^
-                                            continue
-                                else:  # ^**-^
-                                    continue
-                            elif r_death:  # ?-**^
-                                next_x = x + dir_x * (l_max + 2)
-                                next_y = y + dir_y * (l_max + 2)
-                                if inside_board(next_x, next_y):
-                                    if is_ai(next_x, next_y):  # ?*-**^
-                                        next_xx = x + dir_x * (l_max + 3)
-                                        next_yy = y + dir_y * (l_max + 3)
-                                        if inside_board(next_xx, next_yy):
-                                            if is_ai(next_xx, next_yy):  # **-**^
-                                                if not self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][0]:
-                                                    add_death_four()
-                                                    self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][0] = True
-                                            elif is_player(next_xx, next_yy):  # ^*-**^
-                                                continue
-                                            else:  # -*-**^
-                                                add_death_three()
-                                        else:  # ^*-**^
-                                            continue
-                                    elif is_player(next_x, next_y):  # ^-**^
-                                        continue
-                                    else:  # ?--**^
-                                        next_xx = x - dir_x * (r_max + 3)
-                                        next_yy = y - dir_y * (r_max + 3)
-                                        if inside_board(next_xx, next_yy):
-                                            if is_ai(next_xx, next_yy):  # *--**^
-                                                add_death_three()
-                                            elif is_player(next_xx, next_yy):  # ^--**^
-                                                continue
-                                            else:  # ---**^
-                                                add_death_two()
-                                        else:  # ^--**^
-                                            continue
-                                else:  # ^-**^
-                                    continue
-                    elif count == 1:
-                        if enemy == 0:  # -*-
-                            next_x = x + dir_x * (l_max + 2)
-                            next_y = y + dir_y * (l_max + 2)
-                            if inside_board(next_x, next_y):
-                                if is_ai(next_x, next_y):  # ?*-*-
-                                    next_xx = x + dir_x * (l_max + 3)
-                                    next_yy = y + dir_y * (l_max + 3)
-                                    if inside_board(next_xx, next_yy):
-                                        if is_empty(next_xx, next_yy):  # -*-*-
-                                            if not self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][1]:
-                                                self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][1] = True
-                                                add_live_two()
-                                    next_xx = x - dir_x * (r_max + 2)
-                                    next_yy = y - dir_y * (r_max + 2)
-                                    if inside_board(next_xx, next_yy):
-                                        if is_ai(next_xx, next_yy):  # *-*-*
-                                            chessCombination[self.CHESS_DEATH_THREE] += 1
-                                elif is_empty(next_x, next_y):  # ?--*-
-                                    next_xx = x + dir_x * (l_max + 3)
-                                    next_yy = y + dir_y * (l_max + 3)
-                                    if inside_board(next_xx, next_yy):
-                                        if is_ai(next_xx, next_yy):  # ?*--*-
-                                            next_xxx = x + dir_x * (l_max + 4)
-                                            next_yyy = y + dir_y * (l_max + 4)
-                                            if inside_board(next_xxx, next_yyy) and is_empty(next_xxx,
-                                                                                             next_yyy):  # -*--*-
-                                                if not self.isDoubleTwo[next_x][next_y][index][2]:
-                                                    self.isDoubleTwo[next_x][next_y][index][2] = True
-                                                    self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][2] = True
-                                                    add_live_two()
-                                        elif is_empty(next_xx, next_yy):  # ?---*-
-                                            next_xxx = x + dir_x * (l_max + 4)
-                                            next_yyy = y + dir_y * (l_max + 4)
-                                            if inside_board(next_xxx, next_yyy):
-                                                if is_ai(next_xxx, next_yyy):  # *---*-
-                                                    if not self.isDoubleTwo[next_x][next_y][index][3]:
-                                                        self.isDoubleTwo[next_x][next_y][index][3] = True
-                                                        add_death_two()
-                            next_x = x - dir_x * (r_max + 2)
-                            next_y = y - dir_y * (r_max + 2)
-                            if inside_board(next_x, next_y):
-                                if is_ai(next_x, next_y):  # -*-*?
-                                    next_xx = x - dir_x * (r_max + 3)
-                                    next_yy = y - dir_y * (r_max + 3)
-                                    if inside_board(next_xx, next_yy):
-                                        if is_empty(next_xx, next_yy):  # -*-*-
-                                            if not self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][1]:
-                                                self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][1] = True
-                                                add_live_two()
-                                elif is_empty(next_x, next_y):  # -*--?
-                                    next_xx = x - dir_x * (r_max + 3)
-                                    next_yy = y - dir_y * (r_max + 3)
-                                    if inside_board(next_xx, next_yy):
-                                        if is_ai(next_xx, next_yy):  # -*--*?
-                                            next_xxx = x - dir_x * (r_max + 4)
-                                            next_yyy = y - dir_y * (r_max + 4)
-                                            if inside_board(next_xxx, next_yyy) and is_empty(next_xxx,
-                                                                                             next_yyy):  # -*--*-
-                                                if not self.isDoubleTwo[next_x][next_y][index][2]:
-                                                    self.isDoubleTwo[next_x][next_y][index][2] = True
-                                                    self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][2] = True
-                                                    add_live_two()
-                                        elif is_empty(next_xx, next_yy):  # -*---?
-                                            next_xxx = x - dir_x * (r_max + 4)
-                                            next_yyy = y - dir_y * (r_max + 4)
-                                            if inside_board(next_xxx, next_yyy):
-                                                if is_ai(next_xxx, next_yyy):  # -*---*
-                                                    if not self.isDoubleTwo[next_x][next_y][index][3]:
-                                                        self.isDoubleTwo[next_x][next_y][index][3] = True
-                                                        add_death_two()
-                        else:
-                            if l_death:  # ^*-?
-                                next_x = x - dir_x * (r_max + 2)
-                                next_y = y - dir_y * (r_max + 2)
+                                        self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][0] = True
+                                elif is_player(next_xx, next_yy):  # -**-*^
+                                    add_death_three()
+                                else:  # -**-*-
+                                    add_live_three()
+                            else:  # -**-*^
+                                add_death_three()
+                        elif is_player(next_x, next_y):  # -**-^
+                            enemy_far += 1
+                        else:  # -**--?
+                            next_xx = x - dir_x * (r_max + 3)
+                            next_yy = y - dir_y * (r_max + 3)
+                            if inside_board(next_xx, next_yy):
+                                if is_ai(next_xx, next_yy):  # -**--*
+                                    add_death_three()
+                                else:
+                                    empty += 1
+                            else:
+                                empty += 1
+                    else:  # -**-^
+                        enemy_far += 1
+                    if enemy_far == 2:  # ^-**-^
+                        continue
+                    elif empty == 2:  # n--**--n
+                        add_live_two()
+                else:
+                    if l_death:  # ^**-
+                        next_x = x - dir_x * (r_max + 2)
+                        next_y = y - dir_y * (r_max + 2)
+                        if inside_board(next_x, next_y):
+                            if is_ai(next_x, next_y):  # ^**-*?
                                 next_xx = x - dir_x * (r_max + 3)
                                 next_yy = y - dir_y * (r_max + 3)
-                                next_xxx = x - dir_x * (r_max + 4)
-                                next_yyy = y - dir_y * (r_max + 4)
-                                if inside_board(next_xxx, next_yyy):
-                                    if is_ai(next_x, next_y) \
-                                            and is_empty(next_xx, next_yy) \
-                                            and is_empty(next_xxx, next_yyy):  # ^*-*--
-                                        if not self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][1]:
-                                            self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][1] = True
-                                            add_death_two()
-                                    elif is_empty(next_x, next_y) \
-                                            and is_ai(next_xx, next_yy) \
-                                            and is_empty(next_xxx, next_yyy):  # ^*--*-
-                                        if not self.isDoubleTwo[next_x][next_y][index][2]:
-                                            self.isDoubleTwo[next_x][next_y][index][2] = True
-                                            self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][2] = True
-                                            add_death_two()
-                                    elif is_empty(next_x, next_y) \
-                                            and is_empty(next_xx, next_yy) \
-                                            and is_ai(next_xxx, next_yyy):  # ^*---*
-                                        if not self.isDoubleTwo[next_x][next_y][index][3]:
-                                            self.isDoubleTwo[next_x][next_y][index][3] = True
-                                            add_death_two()
-                            elif r_death:  # ?-*^
-                                next_x = x + dir_x * (l_max + 2)
-                                next_y = y + dir_y * (l_max + 2)
+                                if inside_board(next_xx, next_yy):
+                                    if is_ai(next_xx, next_yy):  # ^**-**
+                                        if not self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][0]:
+                                            add_death_four()
+                                            self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][0] = True
+                                    elif is_player(next_xx, next_yy):  # ^**-*^
+                                        continue
+                                    else:  # ^**-*-
+                                        add_death_three()
+                                else:  # ^**-*^
+                                    continue
+                            elif is_player(next_x, next_y):  # ^**-^
+                                continue
+                            else:  # ^**--?
+                                next_xx = x - dir_x * (r_max + 3)
+                                next_yy = y - dir_y * (r_max + 3)
+                                if inside_board(next_xx, next_yy):
+                                    if is_ai(next_xx, next_yy):  # ^**--*
+                                        add_death_three()
+                                    elif is_player(next_xx, next_yy):  # ^**--^
+                                        continue
+                                    else:  # ^**---
+                                        add_death_two()
+                                else:  # ^**--^
+                                    continue
+                        else:  # ^**-^
+                            continue
+                    elif r_death:  # ?-**^
+                        next_x = x + dir_x * (l_max + 2)
+                        next_y = y + dir_y * (l_max + 2)
+                        if inside_board(next_x, next_y):
+                            if is_ai(next_x, next_y):  # ?*-**^
                                 next_xx = x + dir_x * (l_max + 3)
                                 next_yy = y + dir_y * (l_max + 3)
-                                next_xxx = x + dir_x * (l_max + 4)
-                                next_yyy = y + dir_y * (l_max + 4)
-                                if inside_board(next_xxx, next_yyy):
-                                    if is_ai(next_x, next_y) \
-                                            and is_empty(next_xx, next_yy) \
-                                            and is_empty(next_xxx, next_yyy):  # --*-*^
-                                        if not self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][1]:
-                                            self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][1] = True
-                                            add_death_two()
-                                    elif is_empty(next_x, next_y) \
-                                            and is_ai(next_xx, next_yy) \
-                                            and is_empty(next_xxx, next_yyy):  # -*--*^
+                                if inside_board(next_xx, next_yy):
+                                    if is_ai(next_xx, next_yy):  # **-**^
+                                        if not self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][0]:
+                                            add_death_four()
+                                            self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][0] = True
+                                    elif is_player(next_xx, next_yy):  # ^*-**^
+                                        continue
+                                    else:  # -*-**^
+                                        add_death_three()
+                                else:  # ^*-**^
+                                    continue
+                            elif is_player(next_x, next_y):  # ^-**^
+                                continue
+                            else:  # ?--**^
+                                next_xx = x - dir_x * (r_max + 3)
+                                next_yy = y - dir_y * (r_max + 3)
+                                if inside_board(next_xx, next_yy):
+                                    if is_ai(next_xx, next_yy):  # *--**^
+                                        add_death_three()
+                                    elif is_player(next_xx, next_yy):  # ^--**^
+                                        continue
+                                    else:  # ---**^
+                                        add_death_two()
+                                else:  # ^--**^
+                                    continue
+                        else:  # ^-**^
+                            continue
+            elif count == 1:
+                if enemy == 0:  # -*-
+                    next_x = x + dir_x * (l_max + 2)
+                    next_y = y + dir_y * (l_max + 2)
+                    if inside_board(next_x, next_y):
+                        if is_ai(next_x, next_y):  # ?*-*-
+                            next_xx = x + dir_x * (l_max + 3)
+                            next_yy = y + dir_y * (l_max + 3)
+                            if inside_board(next_xx, next_yy):
+                                if is_empty(next_xx, next_yy):  # -*-*-
+                                    if not self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][1]:
+                                        self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][1] = True
+                                        add_live_two()
+                            next_xx = x - dir_x * (r_max + 2)
+                            next_yy = y - dir_y * (r_max + 2)
+                            if inside_board(next_xx, next_yy):
+                                if is_ai(next_xx, next_yy):  # *-*-*
+                                    add_death_three()
+                        elif is_empty(next_x, next_y):  # ?--*-
+                            next_xx = x + dir_x * (l_max + 3)
+                            next_yy = y + dir_y * (l_max + 3)
+                            if inside_board(next_xx, next_yy):
+                                if is_ai(next_xx, next_yy):  # ?*--*-
+                                    next_xxx = x + dir_x * (l_max + 4)
+                                    next_yyy = y + dir_y * (l_max + 4)
+                                    if inside_board(next_xxx, next_yyy) and is_empty(next_xxx,
+                                                                                     next_yyy):  # -*--*-
                                         if not self.isDoubleTwo[next_x][next_y][index][2]:
                                             self.isDoubleTwo[next_x][next_y][index][2] = True
                                             self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][2] = True
-                                            add_death_two()
-                                    elif is_empty(next_x, next_y) \
-                                            and is_empty(next_xx, next_yy) \
-                                            and is_ai(next_xxx, next_yyy):  # *---*^
-                                        if not self.isDoubleTwo[next_x][next_y][index][3]:
-                                            self.isDoubleTwo[next_x][next_y][index][3] = True
-                                            add_death_two()
-        return chessCombination
+                                            add_live_two()
+                                elif is_empty(next_xx, next_yy):  # ?---*-
+                                    next_xxx = x + dir_x * (l_max + 4)
+                                    next_yyy = y + dir_y * (l_max + 4)
+                                    if inside_board(next_xxx, next_yyy):
+                                        if is_ai(next_xxx, next_yyy):  # *---*-
+                                            if not self.isDoubleTwo[next_x][next_y][index][3]:
+                                                self.isDoubleTwo[next_x][next_y][index][3] = True
+                                                add_death_two()
+                    next_x = x - dir_x * (r_max + 2)
+                    next_y = y - dir_y * (r_max + 2)
+                    if inside_board(next_x, next_y):
+                        if is_ai(next_x, next_y):  # -*-*?
+                            next_xx = x - dir_x * (r_max + 3)
+                            next_yy = y - dir_y * (r_max + 3)
+                            if inside_board(next_xx, next_yy):
+                                if is_empty(next_xx, next_yy):  # -*-*-
+                                    if not self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][1]:
+                                        self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][1] = True
+                                        add_live_two()
+                        elif is_empty(next_x, next_y):  # -*--?
+                            next_xx = x - dir_x * (r_max + 3)
+                            next_yy = y - dir_y * (r_max + 3)
+                            if inside_board(next_xx, next_yy):
+                                if is_ai(next_xx, next_yy):  # -*--*?
+                                    next_xxx = x - dir_x * (r_max + 4)
+                                    next_yyy = y - dir_y * (r_max + 4)
+                                    if inside_board(next_xxx, next_yyy) and is_empty(next_xxx,
+                                                                                     next_yyy):  # -*--*-
+                                        if not self.isDoubleTwo[next_x][next_y][index][2]:
+                                            self.isDoubleTwo[next_x][next_y][index][2] = True
+                                            self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][2] = True
+                                            add_live_two()
+                                elif is_empty(next_xx, next_yy):  # -*---?
+                                    next_xxx = x - dir_x * (r_max + 4)
+                                    next_yyy = y - dir_y * (r_max + 4)
+                                    if inside_board(next_xxx, next_yyy):
+                                        if is_ai(next_xxx, next_yyy):  # -*---*
+                                            if not self.isDoubleTwo[next_x][next_y][index][3]:
+                                                self.isDoubleTwo[next_x][next_y][index][3] = True
+                                                add_death_two()
+                else:
+                    if l_death:  # ^*-?
+                        next_x = x - dir_x * (r_max + 2)
+                        next_y = y - dir_y * (r_max + 2)
+                        next_xx = x - dir_x * (r_max + 3)
+                        next_yy = y - dir_y * (r_max + 3)
+                        next_xxx = x - dir_x * (r_max + 4)
+                        next_yyy = y - dir_y * (r_max + 4)
+                        if inside_board(next_xxx, next_yyy):
+                            if is_ai(next_x, next_y) \
+                                    and is_empty(next_xx, next_yy) \
+                                    and is_empty(next_xxx, next_yyy):  # ^*-*--
+                                if not self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][1]:
+                                    self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][1] = True
+                                    add_death_two()
+                            elif is_empty(next_x, next_y) \
+                                    and is_ai(next_xx, next_yy) \
+                                    and is_empty(next_xxx, next_yyy):  # ^*--*-
+                                if not self.isDoubleTwo[next_x][next_y][index][2]:
+                                    self.isDoubleTwo[next_x][next_y][index][2] = True
+                                    self.isDoubleTwo[next_x + dir_x][next_y + dir_y][index][2] = True
+                                    add_death_two()
+                            elif is_empty(next_x, next_y) \
+                                    and is_empty(next_xx, next_yy) \
+                                    and is_ai(next_xxx, next_yyy):  # ^*---*
+                                if not self.isDoubleTwo[next_x][next_y][index][3]:
+                                    self.isDoubleTwo[next_x][next_y][index][3] = True
+                                    add_death_two()
+                    elif r_death:  # ?-*^
+                        next_x = x + dir_x * (l_max + 2)
+                        next_y = y + dir_y * (l_max + 2)
+                        next_xx = x + dir_x * (l_max + 3)
+                        next_yy = y + dir_y * (l_max + 3)
+                        next_xxx = x + dir_x * (l_max + 4)
+                        next_yyy = y + dir_y * (l_max + 4)
+                        if inside_board(next_xxx, next_yyy):
+                            if is_ai(next_x, next_y) \
+                                    and is_empty(next_xx, next_yy) \
+                                    and is_empty(next_xxx, next_yyy):  # --*-*^
+                                if not self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][1]:
+                                    self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][1] = True
+                                    add_death_two()
+                            elif is_empty(next_x, next_y) \
+                                    and is_ai(next_xx, next_yy) \
+                                    and is_empty(next_xxx, next_yyy):  # -*--*^
+                                if not self.isDoubleTwo[next_x][next_y][index][2]:
+                                    self.isDoubleTwo[next_x][next_y][index][2] = True
+                                    self.isDoubleTwo[next_x - dir_x][next_y - dir_y][index][2] = True
+                                    add_death_two()
+                            elif is_empty(next_x, next_y) \
+                                    and is_empty(next_xx, next_yy) \
+                                    and is_ai(next_xxx, next_yyy):  # *---*^
+                                if not self.isDoubleTwo[next_x][next_y][index][3]:
+                                    self.isDoubleTwo[next_x][next_y][index][3] = True
+                                    add_death_two()
+
+    def compute_score(self, ai_combination, player_combination):
+        ai_score, player_score = 0, 0
+        if ai_combination[self.CHESS_FIVE] > 0:
+            return 10000, 0
+        if player_combination[self.CHESS_FIVE] > 0:
+            return 0, 10000
+        if ai_combination[self.CHESS_DEATH_FOUR] > 1:
+            ai_combination[self.CHESS_LIVE_FOUR] += 1
+        if player_combination[self.CHESS_LIVE_FOUR] > 0:
+            return 0, 9050
+        if player_combination[self.CHESS_DEATH_FOUR] > 0:
+            return 0, 9040
+        if ai_combination[self.CHESS_LIVE_FOUR] > 0:
+            return 9030, 0
+        if ai_combination[self.CHESS_DEATH_FOUR] > 0 and ai_combination[self.CHESS_LIVE_THREE] > 0:
+            return 9020, 0
+        if player_combination[self.CHESS_LIVE_THREE] > 0 and ai_combination[self.CHESS_DEATH_FOUR] == 0:
+            return 0, 9010
+        if ai_combination[self.CHESS_LIVE_THREE] > 1 \
+                and player_combination[self.CHESS_LIVE_THREE] == 0 \
+                and player_combination[self.CHESS_DEATH_THREE] == 0:
+            return 9000, 0
+
+        if ai_combination[self.CHESS_DEATH_FOUR] > 0:
+            ai_score += 2000
+
+        if ai_combination[self.CHESS_LIVE_THREE] > 1:
+            ai_score += 500
+        elif ai_combination[self.CHESS_LIVE_THREE] > 0:
+            ai_score += 100
+
+        if player_combination[self.CHESS_LIVE_THREE] > 1:
+            player_score += 2000
+        elif player_combination[self.CHESS_LIVE_THREE] > 0:
+            player_score += 400
+
+        ai_score += ai_combination[self.CHESS_DEATH_THREE] * 10
+        player_score += player_combination[self.CHESS_DEATH_THREE] * 10
+        ai_score += ai_combination[self.CHESS_LIVE_TWO] * 4
+        player_score += player_combination[self.CHESS_LIVE_TWO] * 4
+        ai_score += ai_combination[self.CHESS_DEATH_TWO] * 4
+        player_score += player_combination[self.CHESS_DEATH_TWO] * 4
+
+        return ai_score, player_score
 
 
 chessGame = Gobang("Gobang")
 while True:
     chessGame.refresh()
-    pygame.display.update()
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             sys.exit()
