@@ -8,6 +8,7 @@ BOARD_MARGIN = 30
 BOX_SIZE = (SCREEN_HEIGHT - 2 * BOARD_MARGIN) / (MP_SIZE - 1)
 BUTTON_WIDTH = 40
 BUTTON_HEIGHT = 20
+SEARCH_DEPTH = 2
 
 assert (MP_SIZE % 2 == 1)
 
@@ -155,6 +156,7 @@ class GobangAI:
         self.CHESS_LIVE_TWO = 6
         self.CHESS_DEATH_TWO = 7
         self.dir = [(0, 1), (1, -1), (1, 0), (1, 1)]
+        self.position = None
 
     def get_search_order(self):  # search from center
         orders = []
@@ -169,23 +171,34 @@ class GobangAI:
         score, x, y = self.think(chessType)
         return x, y
 
-    def think(self, chessType):
-        chessAI = chessType
-        chessPlayer = 3 - chessType
-        orders = self.get_search_order()
-        maxScore = -0x7fffffff
+    def think(self, chessType, depth=SEARCH_DEPTH):
+        self.position = None
+        score = self.max_min_search(chessType, depth, depth)
+        print(self.position)
+        x, y = self.position
+        return score, x, y
+
+    def max_min_search(self, chessAI, depth, maxDepth, alpha=-0x7fffffff, beta=0x7fffffff):
+        chessPlayer = 3 - chessAI
+        score = self.get_score(chessAI, chessPlayer)
+        if depth <= 0 or abs(score) >= 10000:
+            return score
         position = None
-        for value, x, y in orders:
+        orders = self.get_search_order()
+        if len(orders) == 0:
+            return score
+        for weight, x, y in orders:
             self.chessBoard.board[x][y] = chessAI
-            chessCombination = self.compute_chess_combination(chessAI, chessPlayer)
+            score = -self.max_min_search(chessPlayer, depth - 1, maxDepth, -beta, -alpha)
             self.chessBoard.board[x][y] = 0
-            ai_combination, player_combination = chessCombination[chessAI - 1], chessCombination[chessPlayer - 1]
-            ai_score, player_score = self.compute_score(ai_combination, player_combination)
-            score = ai_score - player_score
-            if score > maxScore:
-                maxScore = score
-                position = (score, x, y)
-        return position
+            if score > alpha:
+                alpha = score
+                position = (x, y)
+                if alpha >= beta:
+                    break
+        if depth == maxDepth and position:
+            self.position = position
+        return alpha
 
     def compute_chess_combination(self, chessAI, chessPlayer, checkWin=False):
         chessCombination = [[0 for x in range(8)] for y in range(2)]
@@ -284,7 +297,6 @@ class GobangAI:
                     enemy += 1
                     r_death = True
                     break
-            print(count, l_max, r_max)
             if count >= 5:  # *****
                 add_five()
             elif enemy == 2:  # Since then, only one or zero enemies left
@@ -647,18 +659,26 @@ class GobangAI:
 
         return ai_score, player_score
 
+    def get_score(self, chessAI, chessPlayer):
+        chessCombination = self.compute_chess_combination(chessAI, chessPlayer)
+        ai_combination, player_combination = chessCombination[chessAI - 1], chessCombination[chessPlayer - 1]
+        ai_score, player_score = self.compute_score(ai_combination, player_combination)
+        score = ai_score - player_score
+        return score
 
-chessGame = Gobang("Gobang")
-while True:
-    chessGame.refresh()
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            sys.exit()
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            mouse_x, mouse_y = pygame.mouse.get_pos()
-            chessGame.mouse_action(mouse_x, mouse_y)
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_z and pygame.key.get_mods() & pygame.KMOD_CTRL:
-                chessGame.regret()
-            elif event.key == pygame.K_ESCAPE:
+
+if __name__ == '__main__':
+    chessGame = Gobang("Gobang")
+    while True:
+        chessGame.refresh()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
                 sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mouse_x, mouse_y = pygame.mouse.get_pos()
+                chessGame.mouse_action(mouse_x, mouse_y)
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_z and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                    chessGame.regret()
+                elif event.key == pygame.K_ESCAPE:
+                    sys.exit()
