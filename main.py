@@ -6,9 +6,9 @@ SCREEN_WIDTH = 600
 SCREEN_HEIGHT = 600
 BOARD_MARGIN = 30
 BOX_SIZE = (SCREEN_HEIGHT - 2 * BOARD_MARGIN) / (MP_SIZE - 1)
-BUTTON_WIDTH = 40
-BUTTON_HEIGHT = 20
-SEARCH_DEPTH = 2
+BUTTON_HEIGHT = 100
+BUTTON_WIDTH = 500
+SEARCH_DEPTH = 4
 
 assert (MP_SIZE % 2 == 1)
 
@@ -23,6 +23,16 @@ def is_chessboard(mse_x, mse_y):
         return True
     else:
         return False
+
+
+def get_button(mse_x, mse_y):
+    if SCREEN_HEIGHT / 2 - BUTTON_WIDTH / 2 <= mse_x <= SCREEN_HEIGHT / 2 + BUTTON_WIDTH / 2 and \
+            SCREEN_HEIGHT / 4 - BUTTON_HEIGHT / 2 <= mse_y <= SCREEN_HEIGHT / 4 + BUTTON_HEIGHT / 2:
+        return 1
+    if SCREEN_HEIGHT / 2 - BUTTON_WIDTH / 2 <= mse_x <= SCREEN_HEIGHT / 2 + BUTTON_WIDTH / 2 and \
+            (SCREEN_HEIGHT * 3) / 4 - BUTTON_HEIGHT / 2 <= mse_y <= (SCREEN_HEIGHT * 3) / 4 + BUTTON_HEIGHT / 2:
+        return 2
+    return 0
 
 
 class ChessBoard:
@@ -92,34 +102,72 @@ class Gobang:
         self.chessBoard = ChessBoard(MP_SIZE)
         self.turn = True  # default: Player first
         self.AI = GobangAI(self.chessBoard)
+        self.isStart = False
 
     def refresh(self):
         pygame.draw.rect(self.screen, (202, 152, 99), pygame.Rect(0, 0, SCREEN_HEIGHT, SCREEN_HEIGHT))
         pygame.draw.rect(self.screen, (255, 255, 255), pygame.Rect(SCREEN_HEIGHT, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
-        self.chessBoard.initialize(self.screen)
-        pygame.display.update()
+        if self.isStart:
+            self.chessBoard.initialize(self.screen)
+            pygame.display.update()
+        else:
+            aiRect = pygame.Rect(SCREEN_HEIGHT / 2 - BUTTON_WIDTH / 2,
+                                 SCREEN_HEIGHT / 4 - BUTTON_HEIGHT / 2,
+                                 BUTTON_WIDTH,
+                                 BUTTON_HEIGHT)
+            playerRect = pygame.Rect(SCREEN_HEIGHT / 2 - BUTTON_WIDTH / 2,
+                                     (SCREEN_HEIGHT * 3) / 4 - BUTTON_HEIGHT / 2,
+                                     BUTTON_WIDTH,
+                                     BUTTON_HEIGHT)
+            aiText = pygame.font.SysFont("Arial", BUTTON_HEIGHT // 2, True) \
+                .render("AI FIRST", True, (255, 255, 255))
+            aiTextRect = aiText.get_rect()
+            playerText = pygame.font.SysFont("Arial", BUTTON_HEIGHT // 2, True) \
+                .render("PLAYER FIRST", True, (255, 255, 255))
+            playerTextRect = playerText.get_rect()
+            aiTextRect.center = aiRect.center
+            playerTextRect.center = playerRect.center
+            self.screen.fill((255, 0, 0), aiRect)
+            self.screen.fill((255, 0, 0), playerRect)
+            self.screen.blit(aiText, aiTextRect)
+            self.screen.blit(playerText, playerTextRect)
+            pygame.display.update()
 
     def mouse_action(self, mse_x, mse_y):  # Mouse action IS player action, which has to boot GobangAI in the end
-        if is_chessboard(mse_x, mse_y):
-            if self.turn:
-                x, y = self.chessBoard.get_chess_pos(mse_x, mse_y)
-                if x >= 0 and self.chessBoard.board[x][y] == 0:
-                    self.chessBoard.put_chess(x, y)
-                    self.turn = False
-                    self.refresh()
-                    u, v = self.chessBoard.chessList[len(self.chessBoard.chessList) - 1]
-                    chessType = self.chessBoard.board[u][v]
-                    if self.AI.compute_chess_combination(chessType, 3 - chessType, True):
-                        print("You win.")
-                        exit(0)
-                    self.opponent_action()
+        if self.isStart:
+            if is_chessboard(mse_x, mse_y):
+                if self.turn:
+                    x, y = self.chessBoard.get_chess_pos(mse_x, mse_y)
+                    if x >= 0 and self.chessBoard.board[x][y] == 0:
+                        self.chessBoard.put_chess(x, y)
+                        self.turn = False
+                        self.refresh()
+                        u, v = self.chessBoard.chessList[len(self.chessBoard.chessList) - 1]
+                        chessType = self.chessBoard.board[u][v]
+                        if self.AI.compute_chess_combination(chessType, 3 - chessType, True):
+                            print("You win.")
+                            exit(0)
+                        self.opponent_action()
+        else:
+            buttonId = get_button(mse_x, mse_y)
+            if buttonId == 1:
+                self.isStart = True
+                self.turn = False
+                self.refresh()
+                self.opponent_action()
+            elif buttonId == 2:
+                self.isStart = True
 
     def opponent_action(self):
         if not self.turn:
-            u, v = self.chessBoard.chessList[len(self.chessBoard.chessList) - 1]
-            x, y = self.AI.decide(3 - self.chessBoard.board[u][v])
+            if len(self.chessBoard.chessList) > 0:
+                u, v = self.chessBoard.chessList[len(self.chessBoard.chessList) - 1]
+                x, y = self.AI.decide(3 - self.chessBoard.board[u][v])
+                chessType = 3 - self.chessBoard.board[u][v]
+            else:
+                x, y = self.chessBoard.size // 2, self.chessBoard.size // 2
+                chessType = 1
             self.chessBoard.put_chess(x, y)
-            chessType = 3 - self.chessBoard.board[u][v]
             if self.AI.compute_chess_combination(chessType, 3 - chessType, True):
                 print("Computer win.")
                 exit(0)
@@ -158,11 +206,18 @@ class GobangAI:
         self.dir = [(0, 1), (1, -1), (1, 0), (1, 1)]
         self.position = None
 
+    def in_group(self, x, y, r):
+        for i in range(max(x - r, 0), min(x + r, self.chessBoard.size - 1)):
+            for j in range(max(y - r, 0), min(y + r, self.chessBoard.size - 1)):
+                if self.chessBoard.board[i][j] != 0 and (i, j) != (x, y):
+                    return True
+        return False
+
     def get_search_order(self):  # search from center
         orders = []
         for x in range(self.chessBoard.size):
             for y in range(self.chessBoard.size):
-                if self.chessBoard.board[x][y] == 0:
+                if self.chessBoard.board[x][y] == 0 and self.in_group(x, y, 2):
                     orders.append((self.boxValue[x][y], x, y))
         orders.sort(reverse=True)
         return orders
@@ -174,7 +229,6 @@ class GobangAI:
     def think(self, chessType, depth=SEARCH_DEPTH):
         self.position = None
         score = self.max_min_search(chessType, depth, depth)
-        print(self.position)
         x, y = self.position
         return score, x, y
 
@@ -219,7 +273,9 @@ class GobangAI:
                     self.compute_one_side_combination(chessPlayer, chessAI, chessCombination, x, y)
 
         if checkWin:
-            print(chessCombination)
+            aiScore, playerScore = self.compute_score(chessCombination[0], chessCombination[1])
+            score = aiScore - playerScore
+            print('Black side point: ' + str(score))
             return chessCombination[chessAI - 1][self.CHESS_FIVE] > 0
         return chessCombination
 
