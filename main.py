@@ -673,28 +673,30 @@ class GobangAI:
     def compute_score(self, ai_combination, player_combination):
         ai_score, player_score = 0, 0
         if ai_combination[self.CHESS_FIVE] > 0:
-            return 10000, 0
+            return 100000, 0
         if player_combination[self.CHESS_FIVE] > 0:
-            return 0, 10000
+            return 0, 100000
         if ai_combination[self.CHESS_DEATH_FOUR] > 1:
             ai_combination[self.CHESS_LIVE_FOUR] += 1
-        if player_combination[self.CHESS_LIVE_FOUR] > 0:
-            return 0, 9050
-        if player_combination[self.CHESS_DEATH_FOUR] > 0:
-            return 0, 9040
+        if player_combination[self.CHESS_DEATH_FOUR] > 1:
+            player_combination[self.CHESS_LIVE_FOUR] += 1
         if ai_combination[self.CHESS_LIVE_FOUR] > 0:
-            return 9030, 0
-        if ai_combination[self.CHESS_DEATH_FOUR] > 0 and ai_combination[self.CHESS_LIVE_THREE] > 0:
-            return 9020, 0
-        if player_combination[self.CHESS_LIVE_THREE] > 0 and ai_combination[self.CHESS_DEATH_FOUR] == 0:
-            return 0, 9010
-        if ai_combination[self.CHESS_LIVE_THREE] > 1 \
-                and player_combination[self.CHESS_LIVE_THREE] == 0 \
-                and player_combination[self.CHESS_DEATH_THREE] == 0:
-            return 9000, 0
-
+            return 9050, 0
         if ai_combination[self.CHESS_DEATH_FOUR] > 0:
-            ai_score += 2000
+            return 9040, 0
+        if player_combination[self.CHESS_LIVE_FOUR] > 0:
+            return 0, 9030
+        if player_combination[self.CHESS_DEATH_FOUR] > 0 and player_combination[self.CHESS_LIVE_THREE] > 0:
+            return 0, 9020
+        if ai_combination[self.CHESS_LIVE_THREE] > 0 and player_combination[self.CHESS_DEATH_FOUR] == 0:
+            return 9010, 0
+        if player_combination[self.CHESS_LIVE_THREE] > 1 \
+                and ai_combination[self.CHESS_LIVE_THREE] == 0 \
+                and ai_combination[self.CHESS_DEATH_THREE] == 0:
+            return 0, 9000
+
+        if player_combination[self.CHESS_DEATH_FOUR] > 0:
+            player_score += 400
 
         if ai_combination[self.CHESS_LIVE_THREE] > 1:
             ai_score += 500
@@ -708,10 +710,10 @@ class GobangAI:
 
         ai_score += ai_combination[self.CHESS_DEATH_THREE] * 10
         player_score += player_combination[self.CHESS_DEATH_THREE] * 10
-        ai_score += ai_combination[self.CHESS_LIVE_TWO] * 4
-        player_score += player_combination[self.CHESS_LIVE_TWO] * 4
-        ai_score += ai_combination[self.CHESS_DEATH_TWO] * 4
-        player_score += player_combination[self.CHESS_DEATH_TWO] * 4
+        ai_score += ai_combination[self.CHESS_LIVE_TWO] * 6
+        player_score += player_combination[self.CHESS_LIVE_TWO] * 6
+        ai_score += ai_combination[self.CHESS_DEATH_TWO] * 2
+        player_score += player_combination[self.CHESS_DEATH_TWO] * 2
 
         return ai_score, player_score
 
