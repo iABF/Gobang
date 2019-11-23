@@ -8,7 +8,7 @@ BOARD_MARGIN = 30
 BOX_SIZE = (SCREEN_HEIGHT - 2 * BOARD_MARGIN) / (MP_SIZE - 1)
 BUTTON_HEIGHT = 100
 BUTTON_WIDTH = 500
-SEARCH_DEPTH = 4
+SEARCH_DEPTH = 3
 
 assert (MP_SIZE % 2 == 1)
 
@@ -205,6 +205,7 @@ class GobangAI:
         self.CHESS_DEATH_TWO = 7
         self.dir = [(0, 1), (1, -1), (1, 0), (1, 1)]
         self.position = None
+        self.maxPos = 99999999
 
     def in_group(self, x, y, r):
         for i in range(max(x - r, 0), min(x + r, self.chessBoard.size - 1)):
@@ -213,14 +214,44 @@ class GobangAI:
                     return True
         return False
 
-    def get_search_order(self):  # search from center
+    def get_search_order(self, chessAI, chessPlayer):  # search from center
         orders = []
+        greatOrder = [[] for x in range(8)]
         for x in range(self.chessBoard.size):
             for y in range(self.chessBoard.size):
                 if self.chessBoard.board[x][y] == 0 and self.in_group(x, y, 2):
-                    orders.append((self.boxValue[x][y], x, y))
+                    aiScore, playerScore = self.pre_get_score(x, y, chessAI, chessPlayer)
+                    position = (max(aiScore, playerScore), x, y)
+                    if aiScore >= 100000 or playerScore >= 100000:
+                        greatOrder[0].append(position)
+                    elif aiScore >= 10000:
+                        greatOrder[1].append(position)
+                    elif playerScore >= 10000:
+                        greatOrder[2].append(position)
+                    elif aiScore >= 1000:
+                        greatOrder[3].append(position)
+                    orders.append(position)
+        for i in range(2):
+            if len(greatOrder[i]) > 0:
+                return greatOrder[i]
+        if len(greatOrder[2]) > 0:
+            if len(greatOrder[3]) > 0:
+                return greatOrder[2] + greatOrder[3]
+            return greatOrder[2]
         orders.sort(reverse=True)
+        if len(orders) > self.maxPos:
+            orders = orders[:self.maxPos - 1]
         return orders
+
+    def pre_get_score(self, x, y, chessAI, chessPlayer):
+        chessCombination = [[0 for x in range(8)] for y in range(2)]
+        self.chessBoard.board[x][y] = chessAI
+        self.compute_one_side_combination(chessAI, chessPlayer, chessCombination, x, y)
+        self.chessBoard.board[x][y] = chessPlayer
+        self.compute_one_side_combination(chessPlayer, chessAI, chessCombination, x, y)
+        self.chessBoard.board[x][y] = 0
+        aiScore, playerScore = self.compute_score(chessCombination[chessAI - 1], chessCombination[chessPlayer - 1])
+        return aiScore, playerScore
 
     def decide(self, chessType):
         score, x, y = self.think(chessType)
@@ -238,7 +269,7 @@ class GobangAI:
         if depth <= 0 or abs(score) >= 10000:
             return score
         position = None
-        orders = self.get_search_order()
+        orders = self.get_search_order(chessAI, chessPlayer)
         if len(orders) == 0:
             return score
         for weight, x, y in orders:
@@ -722,6 +753,26 @@ class GobangAI:
         ai_combination, player_combination = chessCombination[chessAI - 1], chessCombination[chessPlayer - 1]
         ai_score, player_score = self.compute_score(ai_combination, player_combination)
         score = ai_score - player_score
+        return score
+
+    def compute_simple_score(self, chessCombination):
+        score = 0
+        if chessCombination[self.CHESS_FIVE] > 0:
+            return 100000
+        if chessCombination[self.CHESS_LIVE_FOUR] > 0:
+            return 10000
+        if chessCombination[self.CHESS_DEATH_FOUR] > 1 or \
+                (chessCombination[self.CHESS_DEATH_FOUR] == 1 and chessCombination[self.CHESS_LIVE_THREE] > 0):
+            score += chessCombination[self.CHESS_DEATH_FOUR] * 1000
+        elif chessCombination[self.CHESS_DEATH_FOUR] == 1:
+            score += 100
+        if chessCombination[self.CHESS_LIVE_THREE] > 1:
+            score += 500
+        elif chessCombination[self.CHESS_LIVE_THREE] == 1:
+            score += 100
+        score += chessCombination[self.CHESS_DEATH_THREE] * 10
+        score += chessCombination[self.CHESS_LIVE_TWO] * 8
+        score += chessCombination[self.CHESS_DEATH_TWO] * 2
         return score
 
 
