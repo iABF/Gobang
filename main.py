@@ -714,18 +714,14 @@ class GobangAI:
     def compute_score(self, ai_combination, player_combination):
         ai_score, player_score = 0, 0
         if ai_combination[self.CHESS_FIVE] > 0:
-            return 100000, 0
+            return 10000, 0
         if player_combination[self.CHESS_FIVE] > 0:
-            return 0, 100000
-        if ai_combination[self.CHESS_DEATH_FOUR] > 1:
-            ai_combination[self.CHESS_LIVE_FOUR] += 1
-        if player_combination[self.CHESS_DEATH_FOUR] > 1:
-            player_combination[self.CHESS_LIVE_FOUR] += 1
-        if ai_combination[self.CHESS_LIVE_FOUR] > 0:
+            return 0, 10000
+        if ai_combination[self.CHESS_LIVE_FOUR] + ai_combination[self.CHESS_DEATH_FOUR] // 2 > 0:
             return 9050, 0
         if ai_combination[self.CHESS_DEATH_FOUR] > 0:
             return 9040, 0
-        if player_combination[self.CHESS_LIVE_FOUR] > 0:
+        if player_combination[self.CHESS_LIVE_FOUR] + player_combination[self.CHESS_DEATH_FOUR] // 2 > 0:
             return 0, 9030
         if player_combination[self.CHESS_DEATH_FOUR] > 0 and player_combination[self.CHESS_LIVE_THREE] > 0:
             return 0, 9020
