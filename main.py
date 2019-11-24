@@ -1,5 +1,6 @@
 import pygame
 import sys
+import random
 
 MP_SIZE = 15
 SCREEN_WIDTH = 600
@@ -103,6 +104,7 @@ class Gobang:
         self.turn = True  # default: Player first
         self.AI = GobangAI(self.chessBoard)
         self.isStart = False
+        self.isEnd = False
 
     def refresh(self):
         pygame.draw.rect(self.screen, (202, 152, 99), pygame.Rect(0, 0, SCREEN_HEIGHT, SCREEN_HEIGHT))
@@ -146,16 +148,19 @@ class Gobang:
                         chessType = self.chessBoard.board[u][v]
                         if self.AI.compute_chess_combination(chessType, 3 - chessType, True):
                             print("You win.")
-                            exit(0)
+                            pygame.display.set_caption("You win. Click to start new game.")
+                            self.isEnd = True
                         self.opponent_action()
         else:
             buttonId = get_button(mse_x, mse_y)
             if buttonId == 1:
+                pygame.display.set_caption("AI FIRST")
                 self.isStart = True
                 self.turn = False
                 self.refresh()
                 self.opponent_action()
             elif buttonId == 2:
+                pygame.display.set_caption("PLAYER FIRST")
                 self.isStart = True
 
     def opponent_action(self):
@@ -165,12 +170,14 @@ class Gobang:
                 x, y = self.AI.decide(3 - self.chessBoard.board[u][v])
                 chessType = 3 - self.chessBoard.board[u][v]
             else:
-                x, y = self.chessBoard.size // 2, self.chessBoard.size // 2
+                x, y = random.randint(self.chessBoard.size // 2 - 1, self.chessBoard.size // 2 + 1),\
+                       random.randint(self.chessBoard.size // 2 - 1, self.chessBoard.size // 2 + 1)
                 chessType = 1
             self.chessBoard.put_chess(x, y)
             if self.AI.compute_chess_combination(chessType, 3 - chessType, True):
                 print("Computer win.")
-                exit(0)
+                pygame.display.set_caption("Computer win. Click to start new game.")
+                self.isEnd = True
             self.turn = True
 
     def regret(self):
@@ -183,9 +190,6 @@ class GobangAI:
     def __init__(self, chessBoard):
         self.chessBoard = chessBoard
         center = chessBoard.size // 2
-        self.boxValue = [[(center - max(abs(x - center), abs(y - center)))
-                          for x in range(chessBoard.size)]
-                         for y in range(chessBoard.size)]  # initial weight, make sure AI searches from center
         self.vis = [[[False, False, False, False]
                      for x in range(chessBoard.size)]
                     for y in range(chessBoard.size)]  # whether visited before
@@ -205,15 +209,16 @@ class GobangAI:
         self.CHESS_DEATH_TWO = 7
         self.dir = [(0, 1), (1, -1), (1, 0), (1, 1)]
         self.position = None
-        self.maxPos = 99999999
 
+    # check if position (x, y) is in a game area of radius r
     def in_group(self, x, y, r):
-        for i in range(max(x - r, 0), min(x + r, self.chessBoard.size - 1)):
-            for j in range(max(y - r, 0), min(y + r, self.chessBoard.size - 1)):
+        for i in range(max(x - r, 0), min(x + r, self.chessBoard.size - 1) + 1):
+            for j in range(max(y - r, 0), min(y + r, self.chessBoard.size - 1) + 1):
                 if self.chessBoard.board[i][j] != 0 and (i, j) != (x, y):
                     return True
         return False
 
+    # if easy position exists, just search these positions
     def get_search_order(self, chessAI, chessPlayer):  # search from center
         orders = []
         greatOrder = [[] for x in range(8)]
@@ -239,10 +244,9 @@ class GobangAI:
                 return greatOrder[2] + greatOrder[3]
             return greatOrder[2]
         orders.sort(reverse=True)
-        if len(orders) > self.maxPos:
-            orders = orders[:self.maxPos - 1]
         return orders
 
+    # before AI starts searching, check if easy position exists
     def pre_get_score(self, x, y, chessAI, chessPlayer):
         chessCombination = [[0 for x in range(8)] for y in range(2)]
         self.chessBoard.board[x][y] = chessAI
@@ -253,16 +257,19 @@ class GobangAI:
         aiScore, playerScore = self.compute_score(chessCombination[chessAI - 1], chessCombination[chessPlayer - 1])
         return aiScore, playerScore
 
+    # AI decides, posting result to Gobang Game
     def decide(self, chessType):
         score, x, y = self.think(chessType)
         return x, y
 
+    # how AI make its choice
     def think(self, chessType, depth=SEARCH_DEPTH):
         self.position = None
         score = self.max_min_search(chessType, depth, depth)
         x, y = self.position
         return score, x, y
 
+    # max_min search allows multi-depth thinking
     def max_min_search(self, chessAI, depth, maxDepth, alpha=-0x7fffffff, beta=0x7fffffff):
         chessPlayer = 3 - chessAI
         score = self.get_score(chessAI, chessPlayer)
@@ -285,6 +292,7 @@ class GobangAI:
             self.position = position
         return alpha
 
+    # compute both side chess combination
     def compute_chess_combination(self, chessAI, chessPlayer, checkWin=False):
         chessCombination = [[0 for x in range(8)] for y in range(2)]
         for x in range(self.chessBoard.size):
@@ -310,6 +318,7 @@ class GobangAI:
             return chessCombination[chessAI - 1][self.CHESS_FIVE] > 0
         return chessCombination
 
+    # compute one chess side chess combination
     def compute_one_side_combination(self, chessAI, chessPlayer, chessCombination, x, y):
         def inside_board(xx, yy):
             return 0 <= xx < self.chessBoard.size and 0 <= yy < self.chessBoard.size
@@ -701,6 +710,7 @@ class GobangAI:
                                     self.isDoubleTwo[next_x][next_y][index][3] = True
                                     add_death_two()
 
+    # compute ai score and player score
     def compute_score(self, ai_combination, player_combination):
         ai_score, player_score = 0, 0
         if ai_combination[self.CHESS_FIVE] > 0:
@@ -748,6 +758,7 @@ class GobangAI:
 
         return ai_score, player_score
 
+    # return a score: aiScore - playerScore
     def get_score(self, chessAI, chessPlayer):
         chessCombination = self.compute_chess_combination(chessAI, chessPlayer)
         ai_combination, player_combination = chessCombination[chessAI - 1], chessCombination[chessPlayer - 1]
@@ -755,38 +766,24 @@ class GobangAI:
         score = ai_score - player_score
         return score
 
-    def compute_simple_score(self, chessCombination):
-        score = 0
-        if chessCombination[self.CHESS_FIVE] > 0:
-            return 100000
-        if chessCombination[self.CHESS_LIVE_FOUR] > 0:
-            return 10000
-        if chessCombination[self.CHESS_DEATH_FOUR] > 1 or \
-                (chessCombination[self.CHESS_DEATH_FOUR] == 1 and chessCombination[self.CHESS_LIVE_THREE] > 0):
-            score += chessCombination[self.CHESS_DEATH_FOUR] * 1000
-        elif chessCombination[self.CHESS_DEATH_FOUR] == 1:
-            score += 100
-        if chessCombination[self.CHESS_LIVE_THREE] > 1:
-            score += 500
-        elif chessCombination[self.CHESS_LIVE_THREE] == 1:
-            score += 100
-        score += chessCombination[self.CHESS_DEATH_THREE] * 10
-        score += chessCombination[self.CHESS_LIVE_TWO] * 8
-        score += chessCombination[self.CHESS_DEATH_TWO] * 2
-        return score
-
 
 if __name__ == '__main__':
-    chessGame = Gobang("Gobang")
+    chessGame = Gobang("Gobang [DIFFICULTY: " + str(SEARCH_DEPTH) + "]")
     while True:
         chessGame.refresh()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 sys.exit()
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                mouse_x, mouse_y = pygame.mouse.get_pos()
-                chessGame.mouse_action(mouse_x, mouse_y)
+                if chessGame.isEnd:
+                    chessGame = Gobang("Gobang [DIFFICULTY: " + str(SEARCH_DEPTH) + "]")
+                    chessGame.refresh()
+                else:
+                    mouse_x, mouse_y = pygame.mouse.get_pos()
+                    chessGame.mouse_action(mouse_x, mouse_y)
             elif event.type == pygame.KEYDOWN:
+                if chessGame.isEnd:
+                    continue
                 if event.key == pygame.K_z and pygame.key.get_mods() & pygame.KMOD_CTRL:
                     chessGame.regret()
                 elif event.key == pygame.K_ESCAPE:
