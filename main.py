@@ -254,7 +254,9 @@ class GobangAI:
         self.chessBoard.board[x][y] = chessPlayer
         self.compute_one_side_combination(chessPlayer, chessAI, chessCombination, x, y)
         self.chessBoard.board[x][y] = 0
-        aiScore, playerScore = self.compute_score(chessCombination[chessAI - 1], chessCombination[chessPlayer - 1])
+        aiScore, playerScore =\
+            self.compute_simple_score(chessCombination[chessAI - 1]),\
+            self.compute_simple_score(chessCombination[chessPlayer - 1])
         return aiScore, playerScore
 
     # AI decides, posting result to Gobang Game
@@ -714,9 +716,9 @@ class GobangAI:
     def compute_score(self, ai_combination, player_combination):
         ai_score, player_score = 0, 0
         if ai_combination[self.CHESS_FIVE] > 0:
-            return 10000, 0
+            return 100000, 0
         if player_combination[self.CHESS_FIVE] > 0:
-            return 0, 10000
+            return 0, 100000
         if ai_combination[self.CHESS_LIVE_FOUR] + ai_combination[self.CHESS_DEATH_FOUR] // 2 > 0:
             return 9050, 0
         if ai_combination[self.CHESS_DEATH_FOUR] > 0:
@@ -760,6 +762,27 @@ class GobangAI:
         ai_combination, player_combination = chessCombination[chessAI - 1], chessCombination[chessPlayer - 1]
         ai_score, player_score = self.compute_score(ai_combination, player_combination)
         score = ai_score - player_score
+        return score
+
+    # just compute score for easy position before search
+    def compute_simple_score(self, chessCombination):
+        score = 0
+        if chessCombination[self.CHESS_FIVE] > 0:
+            return 100000
+        if chessCombination[self.CHESS_LIVE_FOUR] > 0:
+            return 10000
+        if chessCombination[self.CHESS_DEATH_FOUR] > 1 or \
+                (chessCombination[self.CHESS_DEATH_FOUR] == 1 and chessCombination[self.CHESS_LIVE_THREE] > 0):
+            score += chessCombination[self.CHESS_DEATH_FOUR] * 1000
+        elif chessCombination[self.CHESS_DEATH_FOUR] == 1:
+            score += 100
+        if chessCombination[self.CHESS_LIVE_THREE] > 1:
+            score += 500
+        elif chessCombination[self.CHESS_LIVE_THREE] == 1:
+            score += 100
+        score += chessCombination[self.CHESS_DEATH_THREE] * 10
+        score += chessCombination[self.CHESS_LIVE_TWO] * 8
+        score += chessCombination[self.CHESS_DEATH_TWO] * 2
         return score
 
 
